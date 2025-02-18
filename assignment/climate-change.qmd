@@ -1,6 +1,6 @@
 ---
 title: "Climate Change Module"
-author: 'Add name'
+author: 'Riley Spoenlein'
 format:
   html:
     embed-resources: true
@@ -43,13 +43,31 @@ ggplot(co2, aes(x = decimal_date, y = monthly_average)) +
 
 Describe the overall trend in the CO2 data.
 
-**Answer 1:**
+**Answer 1:** The trend we can see in the above plot is a steady increase in CO2 concentration. It seems to be increasing more drastically in the last 15(ish) years.
 
 **Question 2:**
 
 How does CO2 vary within a year?  What month is it at max?  Min?  What might explain this sub-annual pattern? (you will need to write code and make a plot to answer this question)
 
-**Answer 2:**
+```{r}
+# Group by month and calculate the average monthly CO2 concentration
+monthly_pattern <- co2 |>
+  group_by(month) |>
+  summarize(average_co2 = mean(monthly_average, na.rm = TRUE))
+
+monthly_pattern$month <- factor(month.abb[monthly_pattern$month], levels = month.abb)
+
+# Plot the average CO2 concentration by month
+ggplot(monthly_pattern, aes(x = month, y = average_co2, group = 1)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Month", y = "Average CO2 Concentration (ppm)",
+       title = "Average Monthly CO2 Levels (All Years)")
+
+```
+
+
+**Answer 2:** We can see that the max levels are around May and lowest in Sep/Oct. CO2 increases at the end of fall and then drastically decreases at the end of spring. This could indicate that once the plants have grown (and are going through photosynthesis), they take in CO2 and cause the levels to drop in the summer. 
 
 
 
@@ -69,7 +87,7 @@ Describe the data set to the best of your ability, given the documentation provi
 - Describe the class of each column and what units it is measured in. 
 - What is the difference between "global temperature" and "global temperature anomaly"? 
 
-**Answer 3:**
+**Answer 3:** This data is from NASA, which we can generally assume is reliable. The year (integer) column goes 1880-present. No_Smoothing (numeric) is the global temperature anomaly for the year in Celsius. Lowess(5) is also numeric and the smoothed version of global temperature anomaly. The temperature anomaly is the difference between the temperature and baseline average.   
 
 
 **Question 4:**
@@ -80,11 +98,39 @@ You'll need to determine the file's delimiter and any comments or skips. You wil
 
 **Answer 4:**
 
+```{r}
+# Read the temperature data with proper cleaning
+temp_data <- read_table(
+  "https://data.giss.nasa.gov/gistemp/graphs/graph_data/Global_Mean_Estimates_based_on_Land_and_Ocean_Data/graph.txt",
+  comment = "#",
+  col_names = c("year", "no_smoothing", "lowess_smoothing")
+) |>
+  # Clean up any non-numeric rows caused by separator lines
+  mutate(across(c(year, no_smoothing, lowess_smoothing), as.numeric)) |>
+  drop_na() # Remove any rows with NA from separator lines
+
+temp_data
+```
+
 **Question 5:**
 
 Plot the trend in global mean temperatures over time.  Describe what you see in the plot and how you interpret the patterns you observe.
 
 **Answer 5:**
+```{r}
+# Plot the global temperature anomalies over time
+ggplot(temp_data, aes(x = year)) +
+  geom_line(aes(y = no_smoothing), color = "red", alpha = 0.5) +
+  geom_line(aes(y = lowess_smoothing), color = "blue", size = 1) +
+  labs(
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    title = "Global Mean Temperature Anomalies (1880 - Present)",
+    caption = "Data Source: NASA GISS Land-Ocean Temperature Index"
+  ) +
+  theme_minimal()
+```
+We see that similarly to the CO2 levels, global temperatures have greatly increased the past century. 
 
 ## Evaluating the evidence for a "Pause" in warming?
 
@@ -97,25 +143,62 @@ You will use rolling averages to help you explore the evidence for a pause. Sinc
 Use a search engine (e.g., Google) or a chat LLM to find out how to calculate a rolling average in R. What search term or chat LLM prompt did you use?  What website or answer from the chat LLM did you end up using?  How much did you need to modify the code from the website or chat LLM to answer the question successfully?
 
 **Answer 6:**
+The base code for this operation is:
+
+library(zoo)
+rolling_avg <- rollmean(data$temperature, k = 5, fill = NA)
+
+I used chatgpt to find this function of the zoo library. The prompt I used was "how can I calculate a rolling average of global temperature in R". I would need to modify the variable names, ect. 
 
 **Question 7:**
 
 - What is the meaning of "5-year average" vs. "annual average"?
 - Create a data frame from the annual temperature anomaly data (from Question 4) with three new columns: 5-year running averages, 10-year running averages, and 20-year running averages.
 
-**Answer 7:**
+**Answer 7:** An annual average is the temperature anomaly for one year. The 5-year average smooths year-to-year fluctuations by looking at the average temperature anomaly over 5-year period. 
+
+```{r}
+library(zoo)
+
+temp_data <- temp_data |>
+  mutate(
+    avg_5yr = rollmean(no_smoothing, k = 5, fill = NA, align = "center"),
+    avg_10yr = rollmean(no_smoothing, k = 10, fill = NA, align = "center"),
+    avg_20yr = rollmean(no_smoothing, k = 20, fill = NA, align = "center")
+  )
+
+temp_data
+```
 
 **Question 8:**
 
 Plot the different averages on the *same plot* and describe what differences you see and why.  
 
 **Answer 8:**
+```{r}
+ggplot(temp_data, aes(x = year)) +
+  geom_line(aes(y = no_smoothing), color = "gray", alpha = 0.5) +
+  geom_line(aes(y = avg_5yr), color = "blue", size = 1) +
+  geom_line(aes(y = avg_10yr), color = "green", size = 1) +
+  geom_line(aes(y = avg_20yr), color = "red", size = 1) +
+  labs(
+    x = "Year",
+    y = "Temperature Anomaly (°C)",
+    title = "Annual and Rolling Averages of Global Temperature Anomalies",
+    caption = "Gray = Annual, Blue = 5-year, Green = 10-year, Red = 20-year"
+  ) +
+  theme_minimal()
+
+```
+
+It is clear that the higher year running averages have a smoother trend as expected. The annual average varies a lot year to year, while the 20-year running average gives us a good idea of the overall change a bit clearer. 
+
 
 **Question 9:**
 
 By examining the data here, what evidence do you find or not find for such a pause? 
 
-**Answer 9:**
+**Answer 9:** It is possible to observe a little decrease/leveling around this time in the 5-year running average (blue line). However, it is not at all present in the other running averages. It is likely that this was simply a short term fluctuation, rather than a "pause". 
 
 ## Longer term trends in CO2 Records
 
@@ -158,10 +241,73 @@ Your answer to Question 10 is going to be a mix of code chunks and text that you
 **Answer 10:**
 
 ```{r}
+# Description of the dataset:
+# - depth_m: Depth in the ice core (meters).
+# - ice_age_bp: Age of the ice in years before present (up t0 1950).
+# - air_age_bp: Age of the air bubbles in years before present (up to 1950).
+# - co2_ppm: Atmospheric CO2 concentration in parts per million (ppm), extracted from trapped air bubbles.
+
+# Temporal Resolution:
+# - The data is irregularly spaced, with intervals of hundreds to a few thousand years.
+# - The resolution is higher in more recent layers and lower in older layers.
+
+# Read the data (skip 21 lines, set column names manually)
+vostok_data <- read_table(
+  "vostok.icecore.co2",
+  skip = 21,
+  col_names = c("depth_m", "ice_age_bp", "air_age_bp", "co2_ppm")
+)
 
 
+# Prepare the data:
+# Convert "years before present" to calendar year (1950 is "present")
+vostok_data <- vostok_data |>
+  mutate(calendar_year = 1950 - air_age_bp) |>
+  arrange(calendar_year)
+
+# Plot Vostok ice core CO2 data
+ggplot(vostok_data, aes(x = calendar_year, y = co2_ppm)) +
+  geom_line(color = "blue") +
+  labs(
+    title = "Vostok Ice Core CO2 Levels (Past 400,000 Years)",
+    x = "Year",
+    y = "CO2 Concentration (ppm)"
+  ) +
+  theme_minimal()
+
+# Read Mauna Loa CO2 data from the warm-up exercise
+co2 <- read_table("https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_mm_mlo.txt",
+                  comment = "#",
+                  col_names = c("year", "month", "decimal_date",
+                                "monthly_average", "deseasonalized",
+                                "days", "sd_days", "unc_month_mean"),
+                  na = c("-1", "-99.99"))
+
+# Process Mauna Loa data (filter NA, group by year)
+co2_recent <- co2 |>
+  filter(!is.na(monthly_average)) |>
+  group_by(year) |>
+  summarize(co2_ppm = mean(monthly_average, na.rm = TRUE)) |>
+  rename(calendar_year = year)
+
+# Combine Vostok and Mauna Loa Data
+combined_co2 <- bind_rows(
+  vostok_data |>
+    select(calendar_year, co2_ppm),
+  co2_recent
+)
+
+# Plot combined CO2 data
+ggplot(combined_co2, aes(x = calendar_year, y = co2_ppm)) +
+  geom_line(color = "black") +
+  labs(
+    title = "CO2 Concentrations: Vostok Ice Core vs. Mauna Loa (Modern)",
+    x = "Year",
+    y = "CO2 Concentration (ppm)"
+  ) +
+  theme_minimal()
 ```
-
+This graph shows pretty consistent fluctuations of CO2 concentration over time. These seem to be generally between 100 and 300 ppm. However, we see that recently it has spiked over 400 which is not consistent with past numbers.
 # Render and committing
 
 Remember to Render your document as HTML and comment+push to GitHub your code and rendered HTML that was created when you knitted the document.  Your GitHub repository should have multiple commits with informative commit messages.
@@ -170,5 +316,5 @@ Remember to Render your document as HTML and comment+push to GitHub your code an
 
 Include citation of any AI-generated assistance or discussion with classmates (per policy in syllabus). Proper documentation of AI-generated assistance includes the prompt, the source (e.g., ChatGPT), and the significant parts of the response.  Proper documentation of discussion with classmates include listing their names and the components discussed.  
 
-
+I used chatgpt to find rollmean as stated above.
 
